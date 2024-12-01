@@ -1,0 +1,71 @@
+import numpy as np
+
+# RNN parameters
+def init_rnn_params(input_size, hidden_size, output_size):
+    np.random.seed(0)
+    Wxh = np.random.randn(hidden_size, input_size) * 0.01  # Input to hidden
+    Whh = np.random.randn(hidden_size, hidden_size) * 0.01  # Hidden to hidden
+    Why = np.random.randn(output_size, hidden_size) * 0.01  # Hidden to output
+    bh = np.zeros((hidden_size, 1))  # Hidden bias
+    by = np.zeros((output_size, 1))  # Output bias
+    return Wxh, Whh, Why, bh, by
+
+# Forward 
+def rnn_forward(inputs, hprev, Wxh, Whh, Why, bh, by):
+    xs, hs, ys = {}, {}, {}
+    hs[-1] = hprev
+    for t in range(len(inputs)):
+        xs[t] = inputs[t]
+        hs[t] = np.tanh(np.dot(Wxh, xs[t]) + np.dot(Whh, hs[t-1]) + bh)
+        ys[t] = np.dot(Why, hs[t]) + by
+    return xs, hs, ys
+
+# Loss and gradients
+def compute_loss_and_gradients(targets, ys, xs, hs, Wxh, Whh, Why, bh, by):
+    dWxh, dWhh, dWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
+    dbh, dby = np.zeros_like(bh), np.zeros_like(by)
+    dhnext = np.zeros_like(hs[0])
+    loss = 0
+
+    for t in reversed(range(len(targets))):
+        loss += 0.5 * np.sum((ys[t] - targets[t])**2)
+        dy = ys[t] - targets[t]
+        dWhy += np.dot(dy, hs[t].T)
+        dby += dy
+        dh = np.dot(Why.T, dy) + dhnext
+        dhraw = (1 - hs[t] * hs[t]) * dh
+        dbh += dhraw
+        dWxh += np.dot(dhraw, xs[t].T)
+        dWhh += np.dot(dhraw, hs[t-1].T)
+        dhnext = np.dot(Whh.T, dhraw)
+
+    for dparam in [dWxh, dWhh, dWhy, dbh, dby]:
+        np.clip(dparam, -5, 5, out=dparam)
+
+    return loss, dWxh, dWhh, dWhy, dbh, dby
+
+# parameters updating 
+def update_parameters(params, grads, learning_rate=1e-3):
+    Wxh, Whh, Why, bh, by = params
+    dWxh, dWhh, dWhy, dbh, dby = grads
+    Wxh -= learning_rate * dWxh
+    Whh -= learning_rate * dWhh
+    Why -= learning_rate * dWhy
+    bh -= learning_rate * dbh
+    by -= learning_rate * dby
+    return Wxh, Whh, Why, bh, by
+
+# create example
+input_size, hidden_size, output_size = 3, 5, 2
+Wxh, Whh, Why, bh, by = init_rnn_params(input_size, hidden_size, output_size)
+inputs = [np.random.randn(input_size, 1) for _ in range(10)]
+targets = [np.random.randn(output_size, 1) for _ in range(10)]
+hprev = np.zeros((hidden_size, 1))
+
+# Training 
+for i in range(100):
+    xs, hs, ys = rnn_forward(inputs, hprev, Wxh, Whh, Why, bh, by)
+    loss, *grads = compute_loss_and_gradients(targets, ys, xs, hs, Wxh, Whh, Why, bh, by)
+    Wxh, Whh, Why, bh, by = update_parameters((Wxh, Whh, Why, bh, by), grads)
+    if i % 10 == 0:
+        print(f"Iteration {i}, Loss: {loss}") 
